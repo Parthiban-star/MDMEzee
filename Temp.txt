@@ -1,0 +1,68 @@
+﻿if (!(referenceId != null))
+                return Json(new { status = false, result = "No records found" }, JsonRequestBehavior.AllowGet);
+
+                var autoList = new List<ObjReleateIdName>();
+                var refDetails = _objReferenceService.Get(ObjId: referenceId ?? 0);
+                if (!(refDetails != null))
+                    return Json(new { status = false, result = "No records found" }, JsonRequestBehavior.AllowGet);
+
+                var refResColumns = _objRefColumnService.GetAll(ObjReferenceId: refDetails.ObjReferenceId,
+                    objTypeId: refDetails.RefForActivityObjTypeId).Where(a => a.DynamicForm == true && a.Kendo == true
+                    && a.GroupBy == true);
+
+
+                var objTypeColumns = _objectColumnService.GetAll(ObjectTypeId: refDetails.RefForActivityObjTypeId);
+                var objResponse = _objResponseService.GetAll(objTypeId: refDetails.RefForActivityObjTypeId);
+
+                if (!((refResColumns != null && refResColumns.Count() > 0) && (objTypeColumns != null && objTypeColumns.Count() > 0)))
+                    return Json(new { status = false, result = "Please create reference columns.." }, JsonRequestBehavior.AllowGet);
+
+                //Get Dynamic IsPrimaryKey Column
+                var parentId = (from p in refResColumns
+                                join q in objTypeColumns on
+                                p.ColumnId equals q.ColumnId
+                                join rs in objResponse on
+                                q.ColumnId equals rs.ColumnId
+                                where (q.IsPrimaryKey == 1)
+                                select new ObjReleateIdName()
+                                {
+                                    ResponseId = rs.ResponseId,
+                                    ColumnId = rs.ColumnId,
+                                    ColumnValue = rs.ColumnValue,
+                                    Text = rs.ColumnValue,
+                                    Value = rs.ColumnValue,
+                                    IsPrimaryKey = q.IsPrimaryKey
+
+                                });
+
+                if (!string.IsNullOrEmpty(strBeginVal) && !strBeginVal.Equals("*"))
+                    parentId = parentId.Where(rs => rs.ColumnValue.ToLower().Contains(strBeginVal.ToLower()));
+
+                if (!(parentId.Count() > 0))
+                    return Json(new { status = false, result = "No records found" }, JsonRequestBehavior.AllowGet);
+
+                //Get Dynamic Name pair value using IsPrimaryKey Column
+                var pairId = parentId.Select(e => e.ResponseId + 1).ToArray();
+                var parentIdNames = (from rs in objResponse
+                                     where pairId.Contains(rs.ResponseId)
+                                     select new ObjReleateIdName()
+                                     {
+                                         ResponseId = rs.ResponseId,
+                                         ColumnId = rs.ColumnId,
+                                         ColumnValue = rs.ColumnValue,
+
+                                     });
+
+                foreach (var lst in parentIdNames.ToList())
+                {
+                    var tempId = (lst.ResponseId - 1);
+                    var colt = parentId.ToList().Where(e => e.ResponseId == tempId).Select(e => new ObjReleateIdName()
+                    {
+                        Value = string.Concat(e.ResponseId, "|", lst.ColumnValue.ToFixNAL(), "|", e.ColumnId.ToFixNull()),
+                        Text = e.Value
+
+                    });
+                    autoList.AddRange(colt);
+                }
+
+                return Json(new { status = true, result = autoList }, JsonRequestBehavior.AllowGet);
